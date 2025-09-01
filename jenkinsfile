@@ -1,0 +1,73 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Cleanup existing directory'){
+            steps{
+                deleteDir()
+            }
+        }
+        stage('Clone') {
+            steps {
+                sh 'git clone -b dockerJenkins 
+https://github.com/okanshuman/Docker-ViteApp.git'
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                echo 'build and run the docker image'
+                sh '''
+                cd Docker-ViteApp
+                docker build -t vite-app .
+                docker ps -q --filter "name=vite-app" | grep -q . && 
+docker stop vite-app && docker rm vite-app || true
+                docker run -d -p 5174:80 --name vite-app vite-app
+                '''
+                }
+            }
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 
+'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 
+'DOCKER_PASS')]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u 
+"anchalsinghania" --password-stdin
+                        docker tag vite-app 
+anchalsinghania/vite-app:latest
+                        docker push anchalsinghania/vite-app:latest
+                    '''
+                    }
+                }
+            }
+        stage('Push to GitHub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 
+'github-creds', usernameVariable: 'GIT_USER', passwordVariable: 
+'GIT_PASS')]) {
+                    sh '''
+                        cd Docker-ViteApp
+                        git config user.email 
+"aanchal.singhania1995@gmail.com"
+                        git config user.name "anchal-singhania12"
+                        echo "Removing origin remote if exists"
+                        echo "Checking if 'origin' remote exists"
+                        git remote get-url origin && git remote remove 
+origin || echo "No existing origin"
+                        echo "Adding origin remote"
+                        git remote add origin 
+https://anchal-singhania12:$GIT_PASS@github.com/anchal-singhania12/my-viteapp-pipeline.git
+                        echo "Staging all changes"
+                        git add .
+                        echo "Committing changes"
+                        git commit -m "Update from Jenkins" || echo 
+"Nothing to commit"
+                        echo "Pushing to dockerJenkins branch"
+                        git push origin dockerJenkins
+                    '''
+         }
+    }
+}
+
+    }
+}
